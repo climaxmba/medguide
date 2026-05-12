@@ -34,7 +34,7 @@ Vora is built using modern web development patterns and AI integrations.
 
 ### Architecture Highlights
 
-- **Text Chat (Gemini Pro/Flash)**: 
+- **Text Chat (Gemini Flash)**: 
   - Utilizes the `generateContentStream` method for fluid, real-time text generation.
   - Supports multi-modal capabilities; file uploads (images, PDFs) are converted into compatible generative `Part` objects and passed cleanly to the Gemini backend.
   - Complete history and session state is persisted client-side using `idb` (IndexedDB), ensuring user privacy and fast offline retrieval without the need for a dedicated backend database.

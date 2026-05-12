@@ -25,13 +25,6 @@ export function ChatApplication() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const loadMessages = async () => {
-    try {
-      const msgs = await getMessages();
-      setMessages(msgs as Message[]);
-    } catch(e) {}
-  };
-
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
