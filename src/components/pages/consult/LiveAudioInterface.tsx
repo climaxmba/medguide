@@ -29,7 +29,7 @@ export function LiveAudioInterface() {
   const [isSummaryView, setIsSummaryView] = useState(false);
   const [isPrintingSupported, setIsPrintingSupported] = useState(false);
   const [hasUserSpoken, setHasUserSpoken] = useState(false);
-  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false); // New state
+  const [isGeneratingSummary, setIsGeneratingSummary] = useState(false);
 
   useEffect(() => {
     setIsPrintingSupported(
@@ -128,6 +128,16 @@ export function LiveAudioInterface() {
         activeSourcesRef.current = activeSourcesRef.current.filter(
           (s) => s !== source,
         );
+        
+        setSessionInfo((prevStatus) => {
+          if (
+            activeSourcesRef.current.length === 0 && 
+            prevStatus === "Vora is speaking..."
+          ) {
+            return "Vora is listening...";
+          }
+          return prevStatus;
+        });
       };
       activeSourcesRef.current.push(source);
       nextPlayTimeRef.current = playTime + audioBuffer.duration;
@@ -148,7 +158,6 @@ export function LiveAudioInterface() {
     currentOutputTranscriptionRef.current = "";
 
     try {
-      // 1. Setup Input Audio Capture (16kHz)
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
 
@@ -161,7 +170,6 @@ export function LiveAudioInterface() {
       const processor = inputCtx.createScriptProcessor(4096, 1, 1);
       processorRef.current = processor;
 
-      // 2. Setup Output Audio Playback (24kHz)
       const outputCtx = new (
         window.AudioContext || (window as any).webkitAudioContext
       )({ sampleRate: 24000 });
@@ -174,7 +182,6 @@ export function LiveAudioInterface() {
       analyserRef.current = analyser;
       dataArrayRef.current = new Uint8Array(analyser.frequencyBinCount);
 
-      // 3. Connect to Live API
       const sessionPromise = genAI.live.connect({
         model: "gemini-3.1-flash-live-preview",
         callbacks: {
@@ -188,7 +195,6 @@ export function LiveAudioInterface() {
             processor.onaudioprocess = (e) => {
               const inputData = e.inputBuffer.getChannelData(0);
 
-              // Track if user has spoken (simple volume threshold)
               if (!hasUserSpokenRef.current) {
                 let sumSquares = 0;
                 for (let i = 0; i < inputData.length; i++) {
@@ -196,7 +202,6 @@ export function LiveAudioInterface() {
                 }
                 const rms = Math.sqrt(sumSquares / inputData.length);
                 if (rms > 0.05) {
-                  // 0.05 threshold to avoid background noise triggering it
                   hasUserSpokenRef.current = true;
                   setHasUserSpoken(true);
                 }
@@ -208,8 +213,7 @@ export function LiveAudioInterface() {
                 pcm16[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
               }
               const u8 = new Uint8Array(pcm16.buffer);
-              // Instead of btoa(String.fromCharCode.apply), loop or use TextEncoder?
-              // String.fromCharCode with huge arrays causes stack overflow, but 4096 is fine.
+              
               let binary = "";
               for (let i = 0; i < u8.length; i++) {
                 binary += String.fromCharCode(u8[i]);
@@ -238,7 +242,6 @@ export function LiveAudioInterface() {
             processor.connect(inputCtx.destination);
           },
           onmessage: async (message: any) => {
-            // Handle audio output
             const base64Audio =
               message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
             if (base64Audio) {
@@ -246,11 +249,10 @@ export function LiveAudioInterface() {
               playAudioBase64(base64Audio);
             }
 
-            // Detect interruption
+            // Detect interruption: The user has started speaking and cut off the AI
             if (message.serverContent?.interrupted) {
-              setSessionInfo("Vora is preparing response...");
+              setSessionInfo("Vora is listening..."); // AI stops and listens
               if (outputContextRef.current) {
-                // Stop all currently playing and queued sources
                 activeSourcesRef.current.forEach((source) => {
                   try {
                     source.stop();
@@ -261,7 +263,7 @@ export function LiveAudioInterface() {
               }
             }
 
-            // Handle Transcriptions
+            // Handle Output Transcriptions (AI Speech)
             if (message.serverContent?.outputTranscription) {
               const outTx = message.serverContent.outputTranscription;
               if (outTx.text) {
@@ -276,12 +278,15 @@ export function LiveAudioInterface() {
               }
             }
 
+            // Handle Input Transcriptions (User Speech)
             if (message.serverContent?.inputTranscription) {
               const inTx = message.serverContent.inputTranscription;
               if (inTx.text) {
                 currentInputTranscriptionRef.current += inTx.text;
               }
               if (inTx.finished) {
+                // The user has finished their sentence, now Vora thinks
+                setSessionInfo("Vora is preparing response...");
                 transcriptsRef.current.push({
                   role: "user",
                   text: currentInputTranscriptionRef.current,
@@ -330,8 +335,6 @@ export function LiveAudioInterface() {
       } catch (e) {
         console.error("Failed to send intro:", e);
       }
-
-      // Auto ping or resume context could be added if needed, but the live connection handles itself.
     } catch (err: any) {
       console.error(String(err));
       setIsConnecting(false);
@@ -352,14 +355,12 @@ export function LiveAudioInterface() {
     setIsConnecting(false);
     setSessionInfo("Consultation ended");
 
-    // Clean up connections
     if (processorRef.current && audioContextRef.current) {
       processorRef.current.disconnect();
     }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
     }
-    // Stop all audio playback
     activeSourcesRef.current.forEach((source) => {
       try {
         source.stop();
@@ -383,13 +384,12 @@ export function LiveAudioInterface() {
 
   const generateSummaryHandler = async () => {
     if (seconds < 5) return;
-    setIsGeneratingSummary(true); // Set generating state
+    setIsGeneratingSummary(true); 
     setIsSummaryView(true);
     setSessionInfo("Generating consultation summary...");
-    setSummary(""); // Clear previous summary on retry
+    setSummary(""); 
 
     try {
-      // Ensure we get any pending transcriptions before sending
       const finalTranscripts = [...transcriptsRef.current];
       if (currentInputTranscriptionRef.current.trim()) {
         finalTranscripts.push({
@@ -430,7 +430,7 @@ export function LiveAudioInterface() {
       setSessionInfo("Could not generate summary.");
       setSummary("Failed to generate summary.");
     } finally {
-      setIsGeneratingSummary(false); // Reset generating state
+      setIsGeneratingSummary(false);
     }
   };
 
@@ -530,12 +530,11 @@ export function LiveAudioInterface() {
 
   return (
     <main className="relative flex-1 flex flex-col items-center justify-center p-6 bg-slate-50 overflow-hidden relative">
-      {/* Feedback */}
       <a
         href="https://forms.gle/9BWuHQoBRBR4os2g9"
         target="_blank"
         rel="noopener noreferrer"
-        className="print:hidden fixed bottom-4 right-4 lg:bottom-8 lg:right-8 flex items-center gap-1 rounded shadow-lg p-2 bg-white text-sm text-slate-500 hover:text-black transition-colors"
+        className="print:hidden fixed bottom-4 right-4 z-100 lg:bottom-8 lg:right-8 flex items-center gap-1 rounded shadow-lg p-2 bg-white text-sm text-slate-500 hover:text-black transition-colors"
       >
         Give feedback <ExternalLink className="size-4" />
       </a>
@@ -550,7 +549,6 @@ export function LiveAudioInterface() {
           style={{ zIndex: -1 }}
         />
         <div className="bg-white/80 backdrop-blur-3xl border border-slate-200 shadow-xl p-12 rounded-[3xl] flex flex-col items-center">
-          {/* Visualizer Sphere */}
           <div className="relative w-48 h-48 mb-12 flex justify-center items-center">
             {isActive && (
               <>
@@ -587,7 +585,6 @@ export function LiveAudioInterface() {
             </div>
           </div>
 
-          {/* Status Information */}
           <div className="text-center mb-8">
             <h2 className="text-slate-900 font-display text-2xl font-semibold mb-2">
               {sessionInfo}
@@ -607,7 +604,6 @@ export function LiveAudioInterface() {
             </motion.div>
           )}
 
-          {/* Controls */}
           <div className="flex gap-6">
             {!isActive && !isConnecting ? (
               <button
@@ -627,7 +623,6 @@ export function LiveAudioInterface() {
             )}
           </div>
 
-          {/* Summary generation button */}
           {!isActive && !isConnecting && seconds > 5 && (
             <div className="mt-6 flex flex-col items-center">
               <button
