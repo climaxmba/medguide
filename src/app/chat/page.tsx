@@ -1,5 +1,5 @@
-import { Navbar } from '@/components/Navbar';
-import { ChatApplication } from '@/components/pages/chat/ChatApplication';
+import { Navbar } from "@/components/Navbar";
+import { ChatApplication } from "@/components/pages/chat/ChatApplication";
 
 export default function ChatPage() {
   return (
@@ -9,4 +9,3 @@ export default function ChatPage() {
     </>
   );
 }
-

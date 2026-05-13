@@ -1,5 +1,5 @@
-import { Navbar } from '@/components/Navbar';
-import { LiveAudioInterface } from '@/components/pages/consult/LiveAudioInterface';
+import { Navbar } from "@/components/Navbar";
+import { LiveAudioInterface } from "@/components/pages/consult/LiveAudioInterface";
 
 export default function ConsultPage() {
   return (
@@ -9,4 +9,3 @@ export default function ConsultPage() {
     </>
   );
 }
-
